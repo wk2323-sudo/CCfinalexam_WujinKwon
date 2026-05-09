@@ -1,133 +1,156 @@
-const BALL_R       = 16;
-const GOAL_R       = 32;
-const FORCE_STR    = 0.30;
-const FRICTION     = 0.91;
-const FIELD_RADIUS = 160;
-const GOAL_X       = 500;
-const GOAL_Y       = 500;
-const TIME_LIMIT   = 20;
+//  Settings 
+let MAGNET_RANGE = 160;   // how far the attraction reaches (px)
+let BALL_R       = 18;    // ball radius
 
-let ball;
-let attractMode = true;
-let timeLeft    = TIME_LIMIT;
-let timer;
-let tick = 0;
-let gameOver = false;
 
+//  Game states
+let ball = {};    // the one blue ball  { x, y, vx, vy }
+let goal = {};    // the goal zone      { x, y, r }
+let won  = false; // has the player won?
+
+
+//  Setup — runs once at the start
 function setup() {
-  createCanvas(600, 600);
-  loadLevel();
+  createCanvas(600, 640);
+  textFont("Arial");
+
+  // Place the ball on the left side
+  ball = { x: 80, y: height / 2, vx: 0, vy: 0 };
+
+  // Place the goal on the right side
+  goal = { x: width - 70, y: height / 2, r: 50 };
 }
 
+
+//  Draw — runs every frame 
 function draw() {
-  tick++;
-  background(12, 14, 26);
-  drawGrid();
-  drawGoal();
-  applyMagneticForce();
+  background(20, 20, 35);
+
+  if (won) {
+    drawWinScreen();
+    return;
+  }
+
   updateBall();
-  checkGoal();
+  drawGoal();
+  drawMagnetIndicator();
   drawBall();
-  drawFieldRing();
-  drawTimerBar();
+  checkWin();
 }
 
-function loadLevel() {
-  ball        = { x: 80, y: 80, vx: 0, vy: 0, r: BALL_R };
-  attractMode = true;
-  timeLeft    = TIME_LIMIT;
-  gameOver    = false;
-  clearInterval(timer);
-  timer = setInterval(() => {
-    if (gameOver) return;
-    timeLeft = max(0, timeLeft - 1);
-    if (timeLeft <= 0) {
-      gameOver = true;
-      clearInterval(timer);
-    }
-  }, 1000);
-}
 
-function applyMagneticForce() {
-  if (gameOver) return;
-  let dx   = mouseX - ball.x;
-  let dy   = mouseY - ball.y;
-  let dist = sqrt(dx * dx + dy * dy);
-  if (dist < FIELD_RADIUS && dist > 1) {
-    let dir = attractMode ? 1 : -1;
-    ball.vx += (dx / dist) * FORCE_STR * dir;
-    ball.vy += (dy / dist) * FORCE_STR * dir;
-  }
-}
 
+//  Update ball physics
 function updateBall() {
-  if (gameOver) return;
-  ball.vx *= FRICTION;
-  ball.vy *= FRICTION;
-  ball.x  += ball.vx;
-  ball.y  += ball.vy;
-  if (ball.x - ball.r < 0)      { ball.x = ball.r;          ball.vx =  abs(ball.vx) * 0.55; }
-  if (ball.x + ball.r > width)   { ball.x = width - ball.r;  ball.vx = -abs(ball.vx) * 0.55; }
-  if (ball.y - ball.r < 0)      { ball.y = ball.r;           ball.vy =  abs(ball.vy) * 0.55; }
-  if (ball.y + ball.r > height)  { ball.y = height - ball.r; ball.vy = -abs(ball.vy) * 0.55; }
+
+  // While the mouse is held down, pull the ball toward the cursor
+  if (mouseIsPressed) {
+    let dx = mouseX - ball.x;
+    let dy = mouseY - ball.y;
+    let d  = dist(ball.x, ball.y, mouseX, mouseY);
+
+    if (d > 5 && d < MAGNET_RANGE) {
+      let force = 0.6 * (1 - d / MAGNET_RANGE);  // stronger when closer
+      ball.vx  += force * (dx / d);
+      ball.vy  += force * (dy / d);
+    }
+  }
+
+  // Apply friction so the ball slows down naturally
+  ball.vx *= 0.92;
+  ball.vy *= 0.92;
+
+  // Move the ball
+  ball.x += ball.vx;
+  ball.y += ball.vy;
+
+  // Bounce off the four walls
+  if (ball.x - BALL_R < 0)      { ball.x = BALL_R;          ball.vx *= -1; }
+  if (ball.x + BALL_R > width)  { ball.x = width - BALL_R;  ball.vx *= -1; }
+  if (ball.y - BALL_R < 0)      { ball.y = BALL_R;          ball.vy *= -1; }
+  if (ball.y + BALL_R > height) { ball.y = height - BALL_R; ball.vy *= -1; }
 }
 
-function checkGoal() {
-  if (gameOver) return;
-  let dx = ball.x - GOAL_X;
-  let dy = ball.y - GOAL_Y;
-  if (sqrt(dx * dx + dy * dy) < GOAL_R * 0.85) {
-    gameOver = true;
-    clearInterval(timer);
+
+
+//  Check win
+function checkWin() {
+  if (dist(ball.x, ball.y, goal.x, goal.y) < goal.r - BALL_R) {
+    won = true;
   }
 }
 
-function drawGrid() {
-  stroke(30, 38, 60);
-  strokeWeight(1);
-  for (let x = 0; x < width; x += 40)
-    for (let y = 0; y < height; y += 40)
-      point(x, y);
-}
+
+
+//  drawing helper
+
 
 function drawGoal() {
-  fill(80, 255, 160, 35);
-  stroke(80, 255, 160);
+  // Filled circle
+  noStroke();
+  fill(60, 210, 80, 28);
+  circle(goal.x, goal.y, goal.r * 2);
+
+  // Outline
+  noFill();
+  stroke(60, 210, 80, 130);
   strokeWeight(2);
-  ellipse(GOAL_X, GOAL_Y, GOAL_R * 2);
+  circle(goal.x, goal.y, goal.r * 2);
+
+  // Label
+  fill(60, 210, 80);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(13);
+  text("GOAL", goal.x, goal.y);
 }
 
 function drawBall() {
-  fill(80, 200, 255);
-  stroke(200, 240, 255, 120);
-  strokeWeight(1);
-  ellipse(ball.x, ball.y, ball.r * 2);
-}
-
-function drawFieldRing() {
-  let rc = attractMode ? [255, 100, 100] : [100, 180, 255];
-  noFill();
-  stroke(...rc, 70);
-  strokeWeight(1);
-  ellipse(mouseX, mouseY, FIELD_RADIUS * 2);
+  // Soft glow
   noStroke();
-  fill(...rc);
-  ellipse(mouseX, mouseY, 7);
+  fill(60, 120, 255, 45);
+  circle(ball.x, ball.y, BALL_R * 3.5);
+
+  // Main ball
+  fill(60, 120, 255);
+  circle(ball.x, ball.y, BALL_R * 2);
 }
 
-function drawTimerBar() {
-  let barW   = map(timeLeft, 0, TIME_LIMIT, 0, width);
-  let barCol = timeLeft > 8 ? color(80, 200, 120) :
-               timeLeft > 4 ? color(255, 200, 60) : color(255, 60, 60);
-  noStroke();
-  fill(barCol);
-  rect(0, 0, barW, 4);
-}
-
-function mousePressed() {
-  if (gameOver) {
-    loadLevel();
-  } else {
-    attractMode = !attractMode;
+function drawMagnetIndicator() {
+  // Show a dashed ring around the cursor while the mouse is held
+  if (mouseIsPressed) {
+    noFill();
+    stroke(80, 140, 255, 110);
+    strokeWeight(1.5);
+    circle(mouseX, mouseY, MAGNET_RANGE * 2);
   }
 }
+
+function drawWinScreen() {
+  // Dim overlay
+  fill(0, 0, 0, 160);
+  noStroke();
+  rect(0, 0, width, height);
+
+  // Win message
+  fill(60, 210, 80);
+  textAlign(CENTER, CENTER);
+  textSize(48);
+  text("You Win!", width / 2, height / 2 - 30);
+
+  fill(200);
+  textSize(18);
+  text("Click to play again", width / 2, height / 2 + 30);
+}
+
+
+
+// input
+
+function mouseReleased() {
+  if (won) {
+    ball = { x: 80, y: height / 2, vx: 0, vy: 0 };
+    won  = false;
+  }
+}
+
