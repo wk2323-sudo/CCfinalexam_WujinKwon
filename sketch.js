@@ -1,103 +1,136 @@
-//  Settings 
-let MAGNET_RANGE = 160;   // how far the attraction reaches (px)
-let BALL_R       = 18;    // ball radius
+// Settings
+let MAGNET_RANGE = 160;
+let BALL_R       = 18;
 
 
 //  Game states
-let ball = {};    // the one blue ball  { x, y, vx, vy }
-let goal = {};    // the goal zone      { x, y, r }
-let won  = false; // has the player won?
+//  used a single boolean `won`.
+//  introduces a gameState string so we can handle
+//  multiple outcomes (won vs time's up) cleanly.
+let gameState = "playing";   // "playing" | "won" | "timeUp"
+let ball      = {};
+let goal      = {};
+let score     = 0;
+let timer     = 60;          // seconds remaining
+let lastSec   = 0;           // millis() timestamp of last tick
 
 
-//  Setup — runs once at the start
+
+//  Setup
 function setup() {
   createCanvas(600, 640);
   textFont("Arial");
+  resetGame();
+}
 
-  // Place the ball on the left side
-  ball = { x: 80, y: height / 2, vx: 0, vy: 0 };
-
-  // Place the goal on the right side
-  goal = { x: width - 70, y: height / 2, r: 50 };
+function resetGame() {
+  ball      = { x: 80, y: height / 2, vx: 0, vy: 0 };
+  goal      = { x: width - 70, y: height / 2, r: 50 };
+  gameState = "playing";
+  score     = 0;
+  timer     = 60;
+  lastSec   = millis();
 }
 
 
-//  Draw — runs every frame 
+//  Draw
 function draw() {
   background(20, 20, 35);
 
-  if (won) {
-    drawWinScreen();
-    return;
+  if (gameState === "playing") {
+    tickTimer();
+    updateBall();
+    drawGoal();
+    drawMagnetIndicator();
+    drawBall();
+    drawHUD();        
+    checkWin();
+  } else {
+    drawEndScreen();  // covers both "won" and "timeUp"
   }
-
-  updateBall();
-  drawGoal();
-  drawMagnetIndicator();
-  drawBall();
-  checkWin();
 }
 
 
 
-//  Update ball physics
-function updateBall() {
+//  Timer — counts down once per second
+function tickTimer() {
+  if (millis() - lastSec > 1000) {
+    timer--;
+    lastSec = millis();
+    if (timer <= 0) {
+      timer     = 0;
+      gameState = "timeUp";
+    }
+  }
+}
 
-  // While the mouse is held down, pull the ball toward the cursor
+
+
+//   Ball physics 
+function updateBall() {
   if (mouseIsPressed) {
     let dx = mouseX - ball.x;
     let dy = mouseY - ball.y;
     let d  = dist(ball.x, ball.y, mouseX, mouseY);
-
     if (d > 5 && d < MAGNET_RANGE) {
-      let force = 0.6 * (1 - d / MAGNET_RANGE);  // stronger when closer
+      let force = 0.6 * (1 - d / MAGNET_RANGE);
       ball.vx  += force * (dx / d);
       ball.vy  += force * (dy / d);
     }
   }
 
-  // Apply friction so the ball slows down naturally
   ball.vx *= 0.92;
   ball.vy *= 0.92;
+  ball.x  += ball.vx;
+  ball.y  += ball.vy;
 
-  // Move the ball
-  ball.x += ball.vx;
-  ball.y += ball.vy;
-
-  // Bounce off the four walls
   if (ball.x - BALL_R < 0)      { ball.x = BALL_R;          ball.vx *= -1; }
   if (ball.x + BALL_R > width)  { ball.x = width - BALL_R;  ball.vx *= -1; }
-  if (ball.y - BALL_R < 0)      { ball.y = BALL_R;          ball.vy *= -1; }
+  if (ball.y - BALL_R < 44)     { ball.y = 44 + BALL_R;     ball.vy *= -1; } // top = HUD
   if (ball.y + BALL_R > height) { ball.y = height - BALL_R; ball.vy *= -1; }
 }
-
 
 
 //  Check win
 function checkWin() {
   if (dist(ball.x, ball.y, goal.x, goal.y) < goal.r - BALL_R) {
-    won = true;
+    score     = timer * 10;   // more time left = higher score
+    gameState = "won";
   }
 }
 
 
+//  HUD 
+function drawHUD() {
+  // Dark background bar
+  noStroke();
+  fill(0, 0, 0, 160);
+  rect(0, 0, width, 44);
 
-//  drawing helper
+  // Score (left)
+  fill(255);
+  textSize(16);
+  textAlign(LEFT, CENTER);
+  text("Score: " + score, 14, 22);
 
+  // Timer (right) — turns red when under 10 seconds
+  fill(timer <= 10 ? color(255, 80, 80) : color(255));
+  textAlign(RIGHT, CENTER);
+  text(timer + "s", width - 14, 22);
+}
+
+
+
+//  Drawing helpers
 
 function drawGoal() {
-  // Filled circle
   noStroke();
   fill(60, 210, 80, 28);
   circle(goal.x, goal.y, goal.r * 2);
-
-  // Outline
   noFill();
   stroke(60, 210, 80, 130);
   strokeWeight(2);
   circle(goal.x, goal.y, goal.r * 2);
-
-  // Label
   fill(60, 210, 80);
   noStroke();
   textAlign(CENTER, CENTER);
@@ -106,18 +139,14 @@ function drawGoal() {
 }
 
 function drawBall() {
-  // Soft glow
   noStroke();
   fill(60, 120, 255, 45);
   circle(ball.x, ball.y, BALL_R * 3.5);
-
-  // Main ball
   fill(60, 120, 255);
   circle(ball.x, ball.y, BALL_R * 2);
 }
 
 function drawMagnetIndicator() {
-  // Show a dashed ring around the cursor while the mouse is held
   if (mouseIsPressed) {
     noFill();
     stroke(80, 140, 255, 110);
@@ -126,31 +155,43 @@ function drawMagnetIndicator() {
   }
 }
 
-function drawWinScreen() {
-  // Dim overlay
+
+//  End screen
+function drawEndScreen() {
   fill(0, 0, 0, 160);
   noStroke();
   rect(0, 0, width, height);
 
-  // Win message
-  fill(60, 210, 80);
   textAlign(CENTER, CENTER);
-  textSize(48);
-  text("You Win!", width / 2, height / 2 - 30);
 
-  fill(200);
-  textSize(18);
-  text("Click to play again", width / 2, height / 2 + 30);
+  if (gameState === "won") {
+    fill(60, 210, 80);
+    textSize(48);
+    text("You Win!", width / 2, height / 2 - 50);
+
+    fill(255, 215, 70);
+    textSize(22);
+    text("Score: " + score, width / 2, height / 2 + 10);
+  } else {
+    fill(255, 80, 80);
+    textSize(48);
+    text("Time's Up!", width / 2, height / 2 - 50);
+
+    fill(200);
+    textSize(18);
+    text("You didn't make it in time.", width / 2, height / 2 + 10);
+  }
+
+  fill(160);
+  textSize(16);
+  text("Click to play again", width / 2, height / 2 + 65);
 }
 
 
-
-// input
-
+//  Input
 function mouseReleased() {
-  if (won) {
-    ball = { x: 80, y: height / 2, vx: 0, vy: 0 };
-    won  = false;
+  if (gameState === "won" || gameState === "timeUp") {
+    resetGame();
   }
 }
 
