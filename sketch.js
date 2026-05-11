@@ -23,8 +23,8 @@ class Ball {
     this.dead = false;
  
     if (type === "blue") {
-      this.vx = 0;
-      this.vy = 0;
+     this.vx = random(-0.5, 0.5);
+      this.vy = random(-0.5, 0.5);
     } else {
       // Red starts moving in a random direction
       let angle = random(TWO_PI);
@@ -110,13 +110,16 @@ function resetGame() {
   score     = 0;
   timer     = 60;
   lastSec   = millis();
-  blueDied  = false;
+  blueDied  = false; }
  
+  // Spawn 3 blue balls on the left, 2 red enemies in the middle
   balls = [
-    new Ball(80,  height / 2,        "blue"),
-    new Ball(300, height / 2 + 100,  "red"),
+    new Ball(random(50, 150),  random(60, height - 40), "blue"),
+    new Ball(random(50, 150),  random(60, height - 40), "blue"),
+    new Ball(random(50, 150),  random(60, height - 40), "blue"),
+    new Ball(random(220, 380), random(60, height - 40), "red"),
+    new Ball(random(220, 380), random(60, height - 40), "red"),
   ];
-}
 
 
 //  Draw
@@ -128,7 +131,11 @@ function draw() {
  
     for (let b of balls) b.update();
  
-    checkCollisions();   // ← new
+    checkCollisions();   
+
+     for (let i = balls.length - 1; i >= 0; i--) {
+      if (balls[i].dead) balls.splice(i, 1);
+    }
  
     drawGoal();
     drawMagnetIndicator();
@@ -159,25 +166,43 @@ function tickTimer() {
 
 //  collision detection 
 function checkCollisions() {
-  let blue = balls.find(b => b.type === "blue");
-  let red  = balls.find(b => b.type === "red");
+  for (let i = 0; i < balls.length; i++) {
+    for (let j = i + 1; j < balls.length; j++) {
+      let a = balls[i];
+      let b = balls[j];
+      let d = dist(a.x, a.y, b.x, b.y);
  
-  if (!blue || !red) return;
+      if (d < a.r + b.r) {
  
-  let d = dist(blue.x, blue.y, red.x, red.y);
+        //  Death rule  
+        if (a.type === "blue" && b.type === "red") { a.dead = true; blueDied = true; }
+        if (b.type === "blue" && a.type === "red") { b.dead = true; blueDied = true; }
  
-  if (d < blue.r + red.r) {
-    blue.dead = true;
-    blueDied  = true;
-    gameState = "destroyed";
+        //  Push-apart response 
+        if (d > 0) {
+          let overlap = (a.r + b.r - d) / 2;
+          let nx      = (b.x - a.x) / d;
+          let ny      = (b.y - a.y) / d;
+          a.x -= nx * overlap;   // push a away from b
+          a.y -= ny * overlap;
+          b.x += nx * overlap;   // push b away from a
+          b.y += ny * overlap;
+        }
+      }
+    }
   }
+ 
+  // If any blue died this frame, end the game
+  if (blueDied) gameState = "destroyed";
 }
  
 
 //  check win
 function checkWin() {
-  let blue = balls.find(b => b.type === "blue");
-  if (blue && blue.inGoal()) {
+  let blues = balls.filter(b => b.type === "blue");
+ 
+  // Need at least one blue alive, and every surviving blue in the goal
+  if (blues.length > 0 && blues.every(b => b.inGoal())) {
     score     = timer * 10;
     gameState = "won";
   }
@@ -185,22 +210,21 @@ function checkWin() {
 
 
 //  HUD 
-function drawHUD() {
-  // Dark background bar
+
+ function drawHUD() {
   noStroke();
   fill(0, 0, 0, 160);
   rect(0, 0, width, 44);
-
-  // Score (left)
+ 
+  let bluesLeft = balls.filter(b => b.type === "blue").length;
+  let bluesIn   = balls.filter(b => b.type === "blue" && b.inGoal()).length;
+ 
   fill(255);
   textSize(16);
-  textAlign(LEFT, CENTER);
-  text("Score: " + score, 14, 22);
-
-  // Timer (right) — turns red when under 10 seconds
+  textAlign(LEFT,   CENTER); text("Balls: " + bluesIn + "/" + bluesLeft, 14,          22);
+  textAlign(CENTER, CENTER); text("Score: " + score,                     width / 2,   22);
   fill(timer <= 10 ? color(255, 80, 80) : color(255));
-  textAlign(RIGHT, CENTER);
-  text(timer + "s", width - 14, 22);
+  textAlign(RIGHT,  CENTER); text(timer + "s",                           width - 14,  22);
 }
 
 
